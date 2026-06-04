@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="Visualizador interactivo de la Cadena de Markov de Ehrenfest — distribución estacionaria, clases de comunicación, tiempos de recurrencia y simulación en tiempo real." />
+  <title>Cadena de Ehrenfest — Visualizador Interactivo</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- ==================== HEADER ==================== -->
+    <header class="header">
+      <div class="header__badge">Procesos Estocásticos UD 2026-1</div>
+      <h1 class="header__title">Cadena de Ehrenfest</h1>
+      <p class="header__subtitle">
+        Modelo de difusión: <em>N</em> bolas entre dos urnas con transferencias aleatorias.
+      </p>
+    </header>
+
+    <!-- ==================== CONTROLS (only N) ==================== -->
+    <section class="controls" id="controls">
+      <div class="control-group">
+        <label for="inputN">Número de bolas (N)</label>
+        <input type="number" id="inputN" min="2" value="6" />
+      </div>
+      <button class="btn btn--primary" id="btnRun" onclick="runAnalysis()">
+        Ejecutar Análisis
+      </button>
+    </section>
+
+    <!-- ==================== URN VISUALIZATION — ESTADO ACTUAL ==================== -->
+    <section class="urn-viz-card" id="urnVizCard">
+      <div class="urn-viz-card__header">
+        <div class="urn-viz-card__indicator"></div>
+        <span class="urn-viz-card__title">Distribución Inicial (π<sup>(0)</sup>)</span>
+      </div>
+      <div class="urn-viz-card__body">
+        <!-- Slider for initial state -->
+        <div class="urn-slider">
+          <label class="urn-slider__label" for="urnSlider">Estado inicial:</label>
+          <input type="range" id="urnSlider" class="urn-slider__input" min="0" max="6" value="0" />
+          <span class="urn-slider__value" id="urnSliderValue">0</span>
+        </div>
+
+        <!-- Urn boxes -->
+        <div class="urn-boxes">
+          <div class="urn-box urn-box--a">
+            <span class="urn-box__label">URNA A</span>
+            <div class="urn-box__balls" id="urnBallsA"></div>
+            <span class="urn-box__count" id="urnBoxCountA">0</span>
+          </div>
+          <div class="urn-box urn-box--b">
+            <span class="urn-box__label">URNA B</span>
+            <div class="urn-box__balls" id="urnBallsB"></div>
+            <span class="urn-box__count" id="urnBoxCountB">6</span>
+          </div>
+        </div>
+
+        <!-- Probabilities -->
+        <div class="urn-probabilities" id="urnProbabilities">
+          Estado i=3: p(3,2) = 3/6 = 0.500 | p(3,4) = 3/6 = 0.500
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== EMPTY STATE ==================== -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-state__icon">🎱</div>
+      <p class="empty-state__text">Configura los parámetros y presiona <strong>Ejecutar Análisis</strong> para
+        visualizar la cadena de Ehrenfest.</p>
+      <p class="empty-state__hint">Usa N ≥ 2 para explorar la cadena de Ehrenfest.</p>
+    </div>
+
+    <!-- ==================== RESULTS ==================== -->
+    <div class="results-grid" id="resultsGrid" style="display:none;">
+
+      <!-- 1. Transition Matrix -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--matrix">📊</div>
+          <span class="section-card__title">Matriz de Transición (𝜫)</span>
+        </div>
+        <div class="section-card__body">
+          <div class="formula-box">
+            P[i][i−1] = i/N &nbsp;·&nbsp; P[i][i+1] = (N−i)/N
+          </div>
+          <div class="matrix-table-wrapper" id="matrixContainer"></div>
+        </div>
+      </div>
+
+      <!-- 1b. Transition Diagram -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--matrix">🔀</div>
+          <span class="section-card__title">Diagrama de Transición</span>
+        </div>
+        <div class="section-card__body section-card__body--diagram">
+          <div class="diagram-wrapper" id="diagramContainer"></div>
+        </div>
+      </div>
+
+      <!-- 2-4. State Classification and Communication Classes Combined -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--classes">🔗</div>
+          <span class="section-card__title">Clasificación de Estados, Clases de Comunicación y Periodo</span>
+        </div>
+        <div class="section-card__body" id="classificationCombinedContainer"></div>
+      </div>
+
+      <!-- 5a. Stationary Distribution -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--stationary">📐</div>
+          <span class="section-card__title">Distribución Estacionaria (ρ𝜫=ρ)</span>
+        </div>
+        <div class="section-card__body" id="stationaryContainer"></div>
+      </div>
+
+      <!-- 5c. n-step transition matrix -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--nstep">🎯</div>
+          <span class="section-card__title">Matriz de Transición en n Pasos (𝜫<sup>n</sup>)</span>
+          <div class="header-input-group">
+            <label for="inputNStepSrc">Origen (src):</label>
+            <input type="number" id="inputNStepSrc" min="0" value="0" oninput="updateNStepMatrix()" />
+            <label for="inputNStepDst">Destino (dst):</label>
+            <input type="number" id="inputNStepDst" min="0" value="0" oninput="updateNStepMatrix()" />
+            <label for="inputNStepK">Pasos (n):</label>
+            <input type="number" id="inputNStepK" min="1" value="2" oninput="updateNStepMatrix()" />
+          </div>
+        </div>
+        <div class="section-card__body">
+          <div class="formula-box" id="nStepFormula">
+            P<sup>n</sup>[src][dst] = P(X<sub>n</sub> = dst | X<sub>0</sub> = src)
+          </div>
+          <div class="matrix-table-wrapper" id="nStepMatrixContainer"></div>
+        </div>
+      </div>
+
+      <!-- 5b. Distribution after n steps -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--distribution">📈</div>
+          <span class="section-card__title">Distribución Absoluta (X<sub>n</sub> = π<sup>(n)</sup>)</span>
+          <div class="header-input-group">
+            <label for="inputSteps">Pasos (n):</label>
+            <input type="number" id="inputSteps" min="1" value="10" oninput="updateDistribution()" />
+          </div>
+        </div>
+        <div class="section-card__body" id="distContainer"></div>
+      </div>
+
+      <!-- 5e. Mean Transition Times -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--hitting">🎲</div>
+          <span class="section-card__title">Tiempos Medios de Transición (μ<sub>ij</sub>)</span>
+          <div class="header-input-group">
+            <label for="inputSrc">Origen (src):</label>
+            <input type="number" id="inputSrc" min="0" value="0" oninput="updateHittingTimes()" />
+          </div>
+        </div>
+        <div class="section-card__body" id="transitionTimesContainer"></div>
+      </div>
+
+      <!-- 5d. Mean Return Times -->
+      <div class="section-card">
+        <div class="section-card__header">
+          <div class="section-card__icon section-card__icon--return">🔄</div>
+          <span class="section-card__title">Tiempos Medios de Retorno (μ<sub>i</sub>)</span>
+        </div>
+        <div class="section-card__body" id="returnContainer"></div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ==================== SCRIPTS ==================== -->
+  <script src="ehrenfest_algorithm.js"></script>
+  <script>
+    // ============================================================
+    //  STATE
+    // ============================================================
+    let currentResult = null;
+
+    // ============================================================
+    //  INPUT REFS
+    // ============================================================
+    const elN = document.getElementById('inputN');
+    const elSlider = document.getElementById('urnSlider');
+    const elSliderVal = document.getElementById('urnSliderValue');
+
+    // Sync N changes with slider max and hitting times inputs
+    elN.addEventListener('change', () => {
+      const N = parseInt(elN.value);
+      const elSrcInput = document.getElementById('inputSrc');
+      if (elSrcInput) {
+        elSrcInput.max = N;
+        if (parseInt(elSrcInput.value) > N) elSrcInput.value = 0;
+      }
+      const elNStepSrcInput = document.getElementById('inputNStepSrc');
+      const elNStepDstInput = document.getElementById('inputNStepDst');
+      if (elNStepSrcInput) {
+        elNStepSrcInput.max = N;
+        if (parseInt(elNStepSrcInput.value) > N) elNStepSrcInput.value = 0;
+      }
+      if (elNStepDstInput) {
+        elNStepDstInput.max = N;
+        if (parseInt(elNStepDstInput.value) > N) elNStepDstInput.value = 0;
+      }
+      elSlider.max = N;
+      if (parseInt(elSlider.value) > N) elSlider.value = 0;
+      elSliderVal.textContent = elSlider.value;
+      renderUrnViz();
+      if (currentResult) {
+        runAnalysis();
+      }
+    });
+
+    // Slider real-time updates
+    elSlider.addEventListener('input', () => {
+      elSliderVal.textContent = elSlider.value;
+      renderUrnViz();
+      if (currentResult) {
+        updateDistribution();
+      }
+    });
+
+    // ============================================================
+    //  URN VISUALIZATION (always visible)
+    // ============================================================
+    function renderUrnViz() {
+      const N = parseInt(elN.value) || 6;
+      const i0 = parseInt(elSlider.value);
+      const countA = i0;
+      const countB = N - i0;
+
+      let htmlA = '';
+      for (let b = 1; b <= countA; b++) {
+        htmlA += `<div class="ball ball--a" style="animation-delay:${(b - 1) * 40}ms">${b}</div>`;
+      }
+      document.getElementById('urnBallsA').innerHTML = htmlA;
+
+      let htmlB = '';
+      for (let b = countA + 1; b <= N; b++) {
+        htmlB += `<div class="ball ball--b" style="animation-delay:${(b - countA - 1) * 40}ms">${b}</div>`;
+      }
+      document.getElementById('urnBallsB').innerHTML = htmlB;
+
+      document.getElementById('urnBoxCountA').textContent = countA;
+      document.getElementById('urnBoxCountB').textContent = countB;
+
+      const probEl = document.getElementById('urnProbabilities');
+      if (i0 === 0) {
+        probEl.textContent = `Estado i=0:  p(0,1) = ${N}/${N} = 1.000`;
+      } else if (i0 === N) {
+        probEl.textContent = `Estado i=${N}:  p(${N},${N - 1}) = ${N}/${N} = 1.000`;
+      } else {
+        const pDown = (i0 / N).toFixed(3);
+        const pUp = ((N - i0) / N).toFixed(3);
+        probEl.textContent = `Estado i=${i0}:  p(${i0},${i0 - 1}) = ${i0}/${N} = ${pDown}  |  p(${i0},${i0 + 1}) = ${N - i0}/${N} = ${pUp}`;
+      }
+    }
+
+    // ============================================================
+    //  MAIN ANALYSIS (only depends on N)
+    // ============================================================
+    function runAnalysis() {
+      const N = parseInt(elN.value);
+      if (N < 2) { alert('N debe ser al menos 2'); return; }
+
+      const P = buildTransitionMatrix(N);
+      const cls = getCommunicationClasses(N);
+      const sc = classifyStates(N);
+      const pi = stationaryDistribution(N);
+      const mrt = meanReturnTimes(N, pi);
+
+      currentResult = { N, P, cls, sc, pi, mrt };
+
+      // Update secondary input ranges in header
+      const elSrcInput = document.getElementById('inputSrc');
+      if (elSrcInput) {
+        elSrcInput.max = N;
+        if (parseInt(elSrcInput.value) > N) elSrcInput.value = 0;
+      }
+      const elNStepSrcInput = document.getElementById('inputNStepSrc');
+      const elNStepDstInput = document.getElementById('inputNStepDst');
+      if (elNStepSrcInput) {
+        elNStepSrcInput.max = N;
+        if (parseInt(elNStepSrcInput.value) > N) elNStepSrcInput.value = 0;
+      }
+      if (elNStepDstInput) {
+        elNStepDstInput.max = N;
+        if (parseInt(elNStepDstInput.value) > N) elNStepDstInput.value = 0;
+      }
+
+      // Show sections
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('resultsGrid').style.display = 'flex';
+
+      renderMatrix(P, N);
+      renderTransitionDiagram(P, N);
+      renderClassificationCombined(cls, N);
+      renderStationary(pi, N);
+      renderReturnTimes(mrt, N, pi);
+
+      updateDistribution();
+      updateHittingTimes();
+      updateNStepMatrix();
+    }
+
+    // ============================================================
+    //  DYNAMIC CALCULATION HANDLERS
+    // ============================================================
+    function updateDistribution() {
+      if (!currentResult) return;
+      const { N, P } = currentResult;
+      const i0 = parseInt(elSlider.value);
+      const elStepsInput = document.getElementById('inputSteps');
+      const steps = parseInt(elStepsInput.value);
+
+      if (isNaN(steps) || steps < 1) return;
+
+      const distNn = distributionAfterSteps(P, i0, steps);
+      renderDistribution(distNn, i0, steps, N);
+    }
+
+    function updateHittingTimes() {
+      if (!currentResult) return;
+      const { N, P } = currentResult;
+      const elSrcInput = document.getElementById('inputSrc');
+      let src = parseInt(elSrcInput.value);
+
+      if (isNaN(src) || src < 0) return;
+      if (src > N) {
+        src = N;
+        elSrcInput.value = N;
+      }
+
+      const ht = allHittingTimesFrom(P, src);
+      renderTransitionTimes(ht, src, N);
+    }
+
+    function updateNStepMatrix() {
+      if (!currentResult) return;
+      const { N, P } = currentResult;
+      const elNStepSrcInput = document.getElementById('inputNStepSrc');
+      const elNStepDstInput = document.getElementById('inputNStepDst');
+      const elNStepKInput = document.getElementById('inputNStepK');
+
+      let src = parseInt(elNStepSrcInput.value);
+      let dst = parseInt(elNStepDstInput.value);
+      let steps = parseInt(elNStepKInput.value);
+
+      if (isNaN(src) || src < 0) return;
+      if (src > N) {
+        src = N;
+        elNStepSrcInput.value = N;
+      }
+
+      if (isNaN(dst) || dst < 0) return;
+      if (dst > N) {
+        dst = N;
+        elNStepDstInput.value = N;
+      }
+
+      if (isNaN(steps) || steps < 1) return;
+
+      const Pn = matPow(P, steps);
+      renderNStepMatrix(Pn, N, src, dst);
+    }
+
+    function renderNStepMatrix(Pn, N, src, dst) {
+      let html = '<table class="matrix-table"><thead><tr><th>𝜫<sup>n</sup></th>';
+      for (let j = 0; j <= N; j++) html += `<th>${j}</th>`;
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i <= N; i++) {
+        html += `<tr><th>${i}</th>`;
+        for (let j = 0; j <= N; j++) {
+          const val = Pn[i][j];
+          let cellClass = '';
+          if (i === src && j === dst) {
+            cellClass = ' class="highlighted-cell"';
+          } else if (val > 0) {
+            cellClass = ' class="nonzero"';
+          }
+          html += `<td${cellClass}>${val.toFixed(5)}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      document.getElementById('nStepMatrixContainer').innerHTML = html;
+
+      const steps = document.getElementById('inputNStepK').value;
+      const probVal = Pn[src] && Pn[src][dst] !== undefined ? Pn[src][dst].toFixed(6) : '0.000000';
+      document.getElementById('nStepFormula').innerHTML =
+        `π<sup>(${steps})</sup><sub>${src}${dst}</sub> = <strong>${probVal}</strong> &nbsp;(Probabilidad de ir de ${src} a ${dst} en ${steps} pasos)`;
+    }
+
+    // ============================================================
+    //  1. RENDER MATRIX
+    // ============================================================
+    function renderMatrix(P, N) {
+      let html = '<table class="matrix-table"><thead><tr><th>𝜫</th>';
+      for (let j = 0; j <= N; j++) html += `<th>${j}</th>`;
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i <= N; i++) {
+        html += `<tr><th>${i}</th>`;
+        for (let j = 0; j <= N; j++) {
+          const v = P[i][j];
+          const cls = v > 0 ? ' class="nonzero"' : '';
+          html += `<td${cls}>${v > 0 ? fractionLabel(i, j, N) : '0'}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      document.getElementById('matrixContainer').innerHTML = html;
+    }
+
+    function fractionLabel(i, j, N) {
+      if (j === i - 1) return `${i}/${N}`;
+      if (j === i + 1) return `${N - i}/${N}`;
+      return '?';
+    }
+
+    // ============================================================
+    //  1b. RENDER TRANSITION DIAGRAM (SVG directed graph)
+    // ============================================================
+    function renderTransitionDiagram(P, N) {
+      const container = document.getElementById('diagramContainer');
+      const width = Math.max(700, (N + 1) * 110);
+      const height = 200;
+      const nodeRadius = 22;
+      const padding = 60;
+
+      // Calculate positions: nodes in a horizontal line
+      const spacing = (width - 2 * padding) / Math.max(N, 1);
+      const nodes = [];
+      for (let i = 0; i <= N; i++) {
+        nodes.push({
+          id: i,
+          x: padding + i * spacing,
+          y: height / 2
+        });
+      }
+
+      let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" class="transition-diagram">`;
+
+      // Defs for arrow markers
+      svg += `<defs>
+        <marker id="arrowRight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--accent-cyan)"/>
+        </marker>
+        <marker id="arrowLeft" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto-start-reverse">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--accent-rose)"/>
+        </marker>
+      </defs>`;
+
+      // Draw edges
+      for (let i = 0; i < N; i++) {
+        const x1 = nodes[i].x;
+        const x2 = nodes[i + 1].x;
+        const y = height / 2;
+
+        // Forward edge: i -> i+1 (top arc)
+        const pUp = P[i][i + 1];
+        if (pUp > 0) {
+          const arcY = y - 32;
+          svg += `<path d="M ${x1 + nodeRadius} ${y - 6} Q ${(x1 + x2) / 2} ${arcY} ${x2 - nodeRadius} ${y - 6}"
+            fill="none" stroke="var(--accent-cyan)" stroke-width="1.5" marker-end="url(#arrowRight)" opacity="0.85"/>`;
+          const labelFrac = `${N - i}/${N}`;
+          svg += `<text x="${(x1 + x2) / 2}" y="${arcY - 4}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--accent-cyan)" font-weight="600">${labelFrac}</text>`;
+        }
+
+        // Backward edge: i+1 -> i (bottom arc)
+        const pDown = P[i + 1][i];
+        if (pDown > 0) {
+          const arcY = y + 32;
+          svg += `<path d="M ${x2 - nodeRadius} ${y + 6} Q ${(x1 + x2) / 2} ${arcY} ${x1 + nodeRadius} ${y + 6}"
+            fill="none" stroke="var(--accent-rose)" stroke-width="1.5" marker-end="url(#arrowLeft)" opacity="0.85"/>`;
+          const labelFrac = `${i + 1}/${N}`;
+          svg += `<text x="${(x1 + x2) / 2}" y="${arcY + 14}" text-anchor="middle"
+            font-family="'JetBrains Mono', monospace" font-size="10" fill="var(--accent-rose)" font-weight="600">${labelFrac}</text>`;
+        }
+      }
+
+      // Draw nodes
+      for (let i = 0; i <= N; i++) {
+        const { x, y } = nodes[i];
+        const isEven = i % 2 === 0;
+        const fillColor = isEven ? 'rgba(99, 102, 241, 0.2)' : 'rgba(139, 92, 246, 0.2)';
+        const strokeColor = isEven ? 'var(--accent-indigo)' : 'var(--accent-violet)';
+
+        svg += `<circle cx="${x}" cy="${y}" r="${nodeRadius}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2"/>`;
+        svg += `<text x="${x}" y="${y + 1}" text-anchor="middle" dominant-baseline="middle"
+          font-family="'JetBrains Mono', monospace" font-size="13" font-weight="700" fill="var(--text-primary)">${i}</text>`;
+      }
+
+      svg += '</svg>';
+      container.innerHTML = svg;
+    }
+
+    // ============================================================
+    //  2-4. RENDER COMBINED CLASSIFICATION & COMMUNICATION CLASSES
+    // ============================================================
+    function renderClassificationCombined(cls, N) {
+      let statesStr = N <= 4
+        ? '{' + Array.from({ length: N + 1 }, (_, i) => i).join(',') + '}'
+        : '{0,1,2,...,' + N + '}';
+
+      let html = `
+        <div class="info-row">
+          <span class="info-row__label">Clases de Comunicación</span>
+          <span class="info-row__value">C(0) = C(1) = C(2) = ... = C(N) = ${statesStr} &rarr; 1 Clase Única (Irreducible)</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row__label">Periodo</span>
+          <span class="info-row__value">λ(i) = 2 &rarr; Para cualquier estado</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row__label">Clasificación de Estados</span>
+          <span class="info-row__value">Recurrentes Positivos &rarr; Cadena Positiva Recurrente</span>
+        </div>
+      `;
+
+      document.getElementById('classificationCombinedContainer').innerHTML = html;
+    }
+
+    // ============================================================
+    //  5a. RENDER STATIONARY DISTRIBUTION
+    // ============================================================
+    function renderStationary(pi, N) {
+      const maxPi = Math.max(...pi);
+      let html = '<div class="formula-box">ρ<sub>(i)</sub> = C(N, i) / 2<sup>N</sup> &nbsp;(Binomial)</div>';
+      html += '<div class="bar-chart">';
+      pi.forEach((p, i) => {
+        const pct = (p / maxPi) * 100;
+        html += `<div class="bar-chart__item">
+          <span class="bar-chart__label">ρ<sub>(${i})</sub></span>
+          <div class="bar-chart__track">
+            <div class="bar-chart__fill bar-chart__fill--indigo" style="width:${pct}%"></div>
+          </div>
+          <span class="bar-chart__value">${p.toFixed(5)}</span>
+        </div>`;
+      });
+      html += '</div>';
+      document.getElementById('stationaryContainer').innerHTML = html;
+    }
+
+    // ============================================================
+    //  5d. RENDER MEAN RETURN TIMES
+    // ============================================================
+    function renderReturnTimes(mrt, N, pi) {
+      const maxMrt = Math.max(...mrt);
+      let html = '<div class="formula-box">μ<sub>i</sub> = 1/ρ(i) = 2<sup>N</sup> / C(N, i)</div>';
+      html += '<div class="bar-chart">';
+      mrt.forEach((t, i) => {
+        const pct = (Math.log(t + 1) / Math.log(maxMrt + 1)) * 100;
+        html += `<div class="bar-chart__item">
+          <span class="bar-chart__label">μ<sub>${i}</sub></span>
+          <div class="bar-chart__track">
+            <div class="bar-chart__fill bar-chart__fill--amber" style="width:${pct}%"></div>
+          </div>
+          <span class="bar-chart__value">${t.toFixed(2)}</span>
+        </div>`;
+      });
+      html += '</div>';
+      document.getElementById('returnContainer').innerHTML = html;
+    }
+
+    // ============================================================
+    //  5b. RENDER DISTRIBUTION AFTER n STEPS
+    // ============================================================
+    function renderDistribution(dist, i0, steps, N) {
+      const maxD = Math.max(...dist);
+      let html = `<div class="formula-box">X<sub>${steps}</sub> = π<sup>(${steps})</sup></div>`;
+      html += '<div class="bar-chart">';
+      dist.forEach((p, j) => {
+        const pct = maxD > 0 ? (p / maxD) * 100 : 0;
+        html += `<div class="bar-chart__item">
+          <span class="bar-chart__label">${j}</span>
+          <div class="bar-chart__track">
+            <div class="bar-chart__fill bar-chart__fill--cyan" style="width:${pct}%"></div>
+          </div>
+          <span class="bar-chart__value">${p.toFixed(5)}</span>
+        </div>`;
+      });
+      html += '</div>';
+      document.getElementById('distContainer').innerHTML = html;
+    }
+
+    // ============================================================
+    //  5e. RENDER MEAN TRANSITION TIMES
+    // ============================================================
+    function renderTransitionTimes(ht, src, N) {
+      let html = `<div class="formula-box">μ<sub>${src}→j</sub> — Tiempo medio de transición desde estado ${src}</div>`;
+      html += '<div class="bar-chart">';
+      const maxHt = Math.max(...ht.filter(t => isFinite(t)));
+      ht.forEach((t, j) => {
+        const pct = maxHt > 0 ? (Math.log(t + 1) / Math.log(maxHt + 1)) * 100 : 0;
+        const valStr = isFinite(t) ? t.toFixed(2) : '∞';
+        html += `<div class="bar-chart__item">
+          <span class="bar-chart__label">${src}→${j}</span>
+          <div class="bar-chart__track">
+            <div class="bar-chart__fill bar-chart__fill--rose" style="width:${pct}%"></div>
+          </div>
+          <span class="bar-chart__value">${valStr}</span>
+        </div>`;
+      });
+      html += '</div>';
+
+      document.getElementById('transitionTimesContainer').innerHTML = html;
+    }
+
+    // ============================================================
+    //  INIT
+    // ============================================================
+    renderUrnViz();
+
+  </script>
+</body>
+
+</html>
