@@ -165,9 +165,16 @@
           <div class="header-input-group">
             <label for="inputSrc">Origen (src):</label>
             <input type="number" id="inputSrc" min="0" value="0" oninput="updateHittingTimes()" />
+            <label for="inputDst">Destino (dst):</label>
+            <input type="number" id="inputDst" min="0" value="0" oninput="updateHittingTimes()" />
           </div>
         </div>
-        <div class="section-card__body" id="transitionTimesContainer"></div>
+        <div class="section-card__body">
+          <div class="formula-box" id="hittingFormula">
+            μ<sub>src→dst</sub> = E[T<sub>src→dst</sub>] — Tiempo medio de primera visita
+          </div>
+          <div class="matrix-table-wrapper" id="transitionTimesContainer"></div>
+        </div>
       </div>
 
       <!-- 5d. Mean Return Times -->
@@ -202,9 +209,14 @@
     elN.addEventListener('change', () => {
       const N = parseInt(elN.value);
       const elSrcInput = document.getElementById('inputSrc');
+      const elDstInput = document.getElementById('inputDst');
       if (elSrcInput) {
         elSrcInput.max = N;
         if (parseInt(elSrcInput.value) > N) elSrcInput.value = 0;
+      }
+      if (elDstInput) {
+        elDstInput.max = N;
+        if (parseInt(elDstInput.value) > N) elDstInput.value = 0;
       }
       const elNStepSrcInput = document.getElementById('inputNStepSrc');
       const elNStepDstInput = document.getElementById('inputNStepDst');
@@ -287,9 +299,14 @@
 
       // Update secondary input ranges in header
       const elSrcInput = document.getElementById('inputSrc');
+      const elDstInput = document.getElementById('inputDst');
       if (elSrcInput) {
         elSrcInput.max = N;
         if (parseInt(elSrcInput.value) > N) elSrcInput.value = 0;
+      }
+      if (elDstInput) {
+        elDstInput.max = N;
+        if (parseInt(elDstInput.value) > N) elDstInput.value = 0;
       }
       const elNStepSrcInput = document.getElementById('inputNStepSrc');
       const elNStepDstInput = document.getElementById('inputNStepDst');
@@ -337,16 +354,27 @@
       if (!currentResult) return;
       const { N, P } = currentResult;
       const elSrcInput = document.getElementById('inputSrc');
+      const elDstInput = document.getElementById('inputDst');
       let src = parseInt(elSrcInput.value);
+      let dst = parseInt(elDstInput.value);
 
       if (isNaN(src) || src < 0) return;
       if (src > N) {
         src = N;
         elSrcInput.value = N;
       }
+      if (isNaN(dst) || dst < 0) return;
+      if (dst > N) {
+        dst = N;
+        elDstInput.value = N;
+      }
 
-      const ht = allHittingTimesFrom(P, src);
-      renderTransitionTimes(ht, src, N);
+      // Build the full hitting times matrix
+      const htMatrix = [];
+      for (let i = 0; i <= N; i++) {
+        htMatrix.push(allHittingTimesFrom(P, i));
+      }
+      renderTransitionTimesMatrix(htMatrix, N, src, dst);
     }
 
     function updateNStepMatrix() {
@@ -541,6 +569,18 @@
     function renderStationary(pi, N) {
       const maxPi = Math.max(...pi);
       let html = '<div class="formula-box">ρ<sub>(i)</sub> = C(N, i) / 2<sup>N</sup> &nbsp;(Binomial)</div>';
+
+      // Vector table
+      html += '<div class="matrix-table-wrapper" style="margin-bottom:1rem">';
+      html += '<table class="matrix-table"><thead><tr><th>ρ</th>';
+      for (let i = 0; i <= N; i++) html += `<th>${i}</th>`;
+      html += '</tr></thead><tbody><tr><th>ρ<sub>i</sub></th>';
+      pi.forEach(p => {
+        html += `<td class="nonzero">${p.toFixed(5)}</td>`;
+      });
+      html += '</tr></tbody></table></div>';
+
+      // Bar chart
       html += '<div class="bar-chart">';
       pi.forEach((p, i) => {
         const pct = (p / maxPi) * 100;
@@ -583,6 +623,19 @@
     function renderDistribution(dist, i0, steps, N) {
       const maxD = Math.max(...dist);
       let html = `<div class="formula-box">X<sub>${steps}</sub> = π<sup>(${steps})</sup></div>`;
+
+      // Vector table
+      html += '<div class="matrix-table-wrapper" style="margin-bottom:1rem">';
+      html += `<table class="matrix-table"><thead><tr><th>π<sup>(${steps})</sup></th>`;
+      for (let j = 0; j <= N; j++) html += `<th>${j}</th>`;
+      html += '</tr></thead><tbody><tr><th>P(X<sub>' + steps + '</sub>=j)</th>';
+      dist.forEach(p => {
+        const cls = p > 0 ? ' class="nonzero"' : '';
+        html += `<td${cls}>${p.toFixed(5)}</td>`;
+      });
+      html += '</tr></tbody></table></div>';
+
+      // Bar chart
       html += '<div class="bar-chart">';
       dist.forEach((p, j) => {
         const pct = maxD > 0 ? (p / maxD) * 100 : 0;
@@ -599,26 +652,36 @@
     }
 
     // ============================================================
-    //  5e. RENDER MEAN TRANSITION TIMES
+    //  5e. RENDER MEAN TRANSITION TIMES (Full Matrix)
     // ============================================================
-    function renderTransitionTimes(ht, src, N) {
-      let html = `<div class="formula-box">μ<sub>${src}→j</sub> — Tiempo medio de transición desde estado ${src}</div>`;
-      html += '<div class="bar-chart">';
-      const maxHt = Math.max(...ht.filter(t => isFinite(t)));
-      ht.forEach((t, j) => {
-        const pct = maxHt > 0 ? (Math.log(t + 1) / Math.log(maxHt + 1)) * 100 : 0;
-        const valStr = isFinite(t) ? t.toFixed(2) : '∞';
-        html += `<div class="bar-chart__item">
-          <span class="bar-chart__label">${src}→${j}</span>
-          <div class="bar-chart__track">
-            <div class="bar-chart__fill bar-chart__fill--rose" style="width:${pct}%"></div>
-          </div>
-          <span class="bar-chart__value">${valStr}</span>
-        </div>`;
-      });
-      html += '</div>';
-
+    function renderTransitionTimesMatrix(htMatrix, N, src, dst) {
+      let html = '<table class="matrix-table"><thead><tr><th>μ<sub>ij</sub></th>';
+      for (let j = 0; j <= N; j++) html += `<th>${j}</th>`;
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i <= N; i++) {
+        html += `<tr><th>${i}</th>`;
+        for (let j = 0; j <= N; j++) {
+          const val = htMatrix[i][j];
+          const valStr = isFinite(val) ? val.toFixed(2) : '∞';
+          let cellClass = '';
+          if (i === src && j === dst) {
+            cellClass = ' class="highlighted-cell"';
+          } else if (val > 0 && isFinite(val)) {
+            cellClass = ' class="nonzero"';
+          }
+          html += `<td${cellClass}>${valStr}</td>`;
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
       document.getElementById('transitionTimesContainer').innerHTML = html;
+
+      // Update formula box with specific value
+      const selectedVal = htMatrix[src] && htMatrix[src][dst] !== undefined
+        ? (isFinite(htMatrix[src][dst]) ? htMatrix[src][dst].toFixed(4) : '∞')
+        : '—';
+      document.getElementById('hittingFormula').innerHTML =
+        `μ<sub>${src}→${dst}</sub> = <strong>${selectedVal}</strong> &nbsp;(Tiempo medio esperado de ir de ${src} a ${dst})`;
     }
 
     // ============================================================
