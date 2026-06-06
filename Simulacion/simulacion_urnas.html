@@ -939,6 +939,9 @@ function animateParticle(fromA, xNext, N, cb){
     } else {
       part.x=tx; part.y=ty;
       part.urn=toUrn; part.moving=false;
+      // Reorganizar TODAS las partículas en ambas urnas para evitar superposiciones
+      repositionUrn('A', N, nA_after, nB_after, W, H);
+      repositionUrn('B', N, nA_after, nB_after, W, H);
       document.getElementById('lbl-moved').textContent='';
       drawUrnas();
       cb();
